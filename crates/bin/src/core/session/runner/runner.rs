@@ -104,6 +104,13 @@ pub enum RunnerEvent {
         /// Cumulative tokens used so far in this run.
         usage: Option<Usage>,
     },
+    /// Token usage crossed a compaction threshold (claude-code-book Ch07).
+    /// The TUI shows a warning; AutoCompact triggers at the next tier.
+    CompactionNeeded {
+        tier: crate::core::session::compaction::CompactionTier,
+        used: u64,
+        effective: u64,
+    },
     /// The runner encountered an error.
     Error { message: String },
     /// The entire run is complete.
@@ -217,6 +224,23 @@ impl SessionRunner {
             .resolve(&session)
             .map_err(|e| RunError::ModelError(e.to_string()))?;
 
+        // Effective context window (claude-code-book Ch07): model window
+        // minus the reserve for the compaction LLM call itself.
+        let model_window = model
+            .defaults
+            .as_ref()
+            .and_then(|d| d.limits.as_ref())
+            .and_then(|l| l.context)
+            .unwrap_or(200_000);
+        let max_output = model
+            .defaults
+            .as_ref()
+            .and_then(|d| d.limits.as_ref())
+            .and_then(|l| l.output)
+            .unwrap_or(8_192);
+        let effective = crate::core::session::compaction::effective_window(model_window, max_output);
+        let mut breaker = crate::core::session::compaction::CircuitBreaker::default();
+
         let effective_max_steps = agent_steps.map(|s| s as usize).unwrap_or(self.max_steps);
 
         let mut step = 0usize;
@@ -229,6 +253,33 @@ impl SessionRunner {
             let is_last_step = step >= effective_max_steps;
             if is_last_step {
                 tracing::info!("Session {} reached max steps ({})", session_id, effective_max_steps);
+            }
+
+            // Check compaction tier before each step (claude-code-book Ch07).
+            // Skip when breaker is Open or when we have no tx to report on.
+            let used = total_input_tokens + total_output_tokens;
+            let tier = crate::core::session::compaction::pick_tier(used, effective);
+            if tier != crate::core::session::compaction::CompactionTier::None {
+                if breaker.should_try() {
+                    if let Some(tx) = &tx {
+                        let _ = tx.send(RunnerEvent::CompactionNeeded {
+                            tier,
+                            used,
+                            effective,
+                        }).await;
+                    }
+                }
+                if tier == crate::core::session::compaction::CompactionTier::Blocking {
+                    tracing::warn!(
+                        session_id = %session_id,
+                        used, effective,
+                        "context budget blocking; skipping step"
+                    );
+                    // In Blocking tier we refuse to start a new step to avoid
+                    // overflowing the model window. The actual LLM summarization
+                    // is a follow-up; for now emit and break to avoid runaway.
+                    break;
+                }
             }
 
             if let Some(tx) = &tx {
@@ -330,7 +381,14 @@ impl SessionRunner {
         let system_parts = if system_prompt.is_empty() {
             vec![]
         } else {
-            vec![SystemPart::new(system_prompt)]
+            // Mark the system prompt as cacheable. Anthropic-style providers
+            // reuse this prefix across turns (95-99% cache hit per claude-code-
+            // book Ch13). Non-supporting providers ignore the hint.
+            let mut part = SystemPart::new(system_prompt);
+            part.cache = Some(crate::llm::schema::CacheHint {
+                r#type: crate::llm::schema::CacheHintType::Ephemeral,
+            });
+            vec![part]
         };
 
         let request = LlmRequest {

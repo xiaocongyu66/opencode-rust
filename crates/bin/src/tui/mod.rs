@@ -4,6 +4,7 @@
 
 pub mod theme;
 pub mod component;
+pub mod kit;
 pub mod event;
 pub mod app;
 pub mod ui;

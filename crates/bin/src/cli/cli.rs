@@ -78,6 +78,13 @@ pub enum Commands {
         #[arg(long, default_value_t = false)]
         register: bool,
     },
+
+    /// Check for a newer release and self-update.
+    Update {
+        /// Print the target version without installing.
+        #[arg(long, default_value_t = false)]
+        check: bool,
+    },
 }
 
 /// `debug` subcommands.

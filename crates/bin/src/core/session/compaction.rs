@@ -127,6 +127,158 @@ pub fn truncate_tool_output(value: &str) -> String {
     )
 }
 
+// ============================================================================
+// Four-tier compaction (claude-code-book Ch07 design)
+// ============================================================================
+
+/// Token usage thresholds as fraction of effective context window.
+/// Safe < Warning < AutoCompact < Blocking.
+pub const THRESHOLD_SAFE: f64 = 0.85;
+pub const THRESHOLD_AUTOCOMPACT: f64 = 0.90;
+pub const THRESHOLD_BLOCKING: f64 = 0.95;
+
+/// Reserve for the compaction LLM call itself (it needs output tokens to
+/// generate the summary). min(max_output, 20_000) per the book.
+pub const COMPACTION_RESERVE: u64 = 20_000;
+
+/// Circuit breaker: after this many consecutive failures, stop trying.
+pub const MAX_CONSECUTIVE_FAILURES: u32 = 3;
+
+/// Compaction tier selected by current token usage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompactionTier {
+    /// 0-85%: no action needed.
+    None,
+    /// 85-90%: warn user, no compaction yet.
+    Warning,
+    /// 90-95%: trigger AutoCompact (LLM summary of older history).
+    AutoCompact,
+    /// 95-100%: block new requests until compaction succeeds.
+    Blocking,
+}
+
+/// Circuit breaker state machine (Closed → HalfOpen → Open).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BreakerState {
+    /// Normal operation, failure counter = 0.
+    Closed,
+    /// At least one failure; still trying.
+    HalfOpen,
+    /// MAX_CONSECUTIVE_FAILURES reached; skip further attempts.
+    Open,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CircuitBreaker {
+    pub state: BreakerState,
+    pub failures: u32,
+}
+
+impl Default for CircuitBreaker {
+    fn default() -> Self {
+        Self { state: BreakerState::Closed, failures: 0 }
+    }
+}
+
+impl CircuitBreaker {
+    /// Record a compaction failure; transitions to Open after threshold.
+    pub fn record_failure(&mut self) {
+        self.failures = self.failures.saturating_add(1);
+        self.state = if self.failures >= MAX_CONSECUTIVE_FAILURES {
+            BreakerState::Open
+        } else {
+            BreakerState::HalfOpen
+        };
+    }
+
+    /// Record a success; resets to Closed.
+    pub fn record_success(&mut self) {
+        self.failures = 0;
+        self.state = BreakerState::Closed;
+    }
+
+    /// Whether compaction should be attempted (false when Open).
+    pub fn should_try(&self) -> bool {
+        self.state != BreakerState::Open
+    }
+}
+
+/// Effective context window = model_window - min(max_output, COMPACTION_RESERVE).
+/// This is the space actually available for conversation history.
+pub fn effective_window(model_window: u64, max_output: u64) -> u64 {
+    let reserve = max_output.min(COMPACTION_RESERVE);
+    model_window.saturating_sub(reserve)
+}
+
+/// Pick the compaction tier based on current token usage.
+/// `used` / `effective` ratio determines the tier.
+pub fn pick_tier(used: u64, effective: u64) -> CompactionTier {
+    if effective == 0 {
+        return CompactionTier::None;
+    }
+    let ratio = used as f64 / effective as f64;
+    if ratio >= THRESHOLD_BLOCKING {
+        CompactionTier::Blocking
+    } else if ratio >= THRESHOLD_AUTOCOMPACT {
+        CompactionTier::AutoCompact
+    } else if ratio >= THRESHOLD_SAFE {
+        CompactionTier::Warning
+    } else {
+        CompactionTier::None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_effective_window() {
+        // 200k window, 16k max output → 200k - 16k = 184k
+        assert_eq!(effective_window(200_000, 16_384), 183_616);
+        // 200k window, 30k max output → 200k - 20k = 180k (capped at reserve)
+        assert_eq!(effective_window(200_000, 30_000), 180_000);
+        // tiny window edge case
+        assert_eq!(effective_window(10_000, 5_000), 0);
+    }
+
+    #[test]
+    fn test_pick_tier_thresholds() {
+        let eff = 100_000u64;
+        assert_eq!(pick_tier(0, eff), CompactionTier::None);
+        assert_eq!(pick_tier(84_999, eff), CompactionTier::None);
+        assert_eq!(pick_tier(85_000, eff), CompactionTier::Warning);
+        assert_eq!(pick_tier(89_999, eff), CompactionTier::Warning);
+        assert_eq!(pick_tier(90_000, eff), CompactionTier::AutoCompact);
+        assert_eq!(pick_tier(94_999, eff), CompactionTier::AutoCompact);
+        assert_eq!(pick_tier(95_000, eff), CompactionTier::Blocking);
+        assert_eq!(pick_tier(100_000, eff), CompactionTier::Blocking);
+        // edge: zero effective
+        assert_eq!(pick_tier(100, 0), CompactionTier::None);
+    }
+
+    #[test]
+    fn test_circuit_breaker_transitions() {
+        let mut b = CircuitBreaker::default();
+        assert_eq!(b.state, BreakerState::Closed);
+        assert!(b.should_try());
+
+        b.record_failure();
+        assert_eq!(b.state, BreakerState::HalfOpen);
+        assert!(b.should_try());
+
+        b.record_failure();
+        b.record_failure();
+        assert_eq!(b.state, BreakerState::Open);
+        assert!(!b.should_try());
+
+        // success resets
+        b.record_success();
+        assert_eq!(b.state, BreakerState::Closed);
+        assert_eq!(b.failures, 0);
+    }
+}
+
 /// Identify turns in a message list.
 pub fn turns(messages: &[SessionMessage]) -> Vec<Turn> {
     let mut result = Vec::new();

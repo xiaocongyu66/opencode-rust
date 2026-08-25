@@ -25,6 +25,7 @@ pub async fn run(cli: Cli) -> Result<()> {
         Commands::Serve { hostname, port, register } => {
             serve_handler(&hostname, port, register).await
         }
+        Commands::Update { check } => update_handler(check).await,
     }
 }
 
@@ -376,4 +377,163 @@ fn init_rsopencode_dirs() {
     let _ = dir.init_project_config();
     let _ = dir.ensure_global_dir();
     let _ = dir.init_global_config();
+}
+
+// -- update -----------------------------------------------------------------
+
+const REPO_OWNER: &str = "xiaocongyu66";
+const REPO_NAME: &str = "opencode-rust";
+
+/// `rsopencode update` — check GitHub Releases for a newer binary and
+/// replace the running executable in-place. `--check` only prints the
+/// target version.
+async fn update_handler(check_only: bool) -> Result<()> {
+    let current = env!("CARGO_PKG_VERSION");
+    println!("Current version: {}", current);
+
+    let release = fetch_latest_release().await?;
+    println!("Latest release:  {}", release.tag);
+
+    if check_only {
+        return Ok(());
+    }
+
+    if release.tag.trim_start_matches('v') == current {
+        println!("Already up to date.");
+        return Ok(());
+    }
+
+    let target = update_target_triple();
+    let asset_name = format!("rsopencode-{}.tar.gz", target);
+    let asset = release
+        .assets
+        .iter()
+        .find(|a| a.name == asset_name)
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "no release asset named '{}' (available: {})",
+                asset_name,
+                release.assets.iter().map(|a| a.name.as_str()).collect::<Vec<_>>().join(", ")
+            )
+        })?;
+
+    println!("Downloading {}...", asset_name);
+    let bytes = download_asset(&asset.url).await?;
+    let bin = extract_binary_from_targz(&bytes, "rsopencode")?;
+
+    let exe = std::env::current_exe()?;
+    println!("Installing to {}", exe.display());
+    replace_executable(&exe, &bin)?;
+
+    println!("Updated to {}.", release.tag);
+    Ok(())
+}
+
+/// Latest release from GitHub Releases API.
+struct ReleaseInfo {
+    tag: String,
+    assets: Vec<ReleaseAsset>,
+}
+
+struct ReleaseAsset {
+    name: String,
+    url: String,
+}
+
+async fn fetch_latest_release() -> Result<ReleaseInfo> {
+    let url = format!(
+        "https://api.github.com/repos/{}/{}/releases/latest",
+        REPO_OWNER, REPO_NAME
+    );
+    let client = reqwest::Client::new();
+    let resp = client
+        .get(&url)
+        .header("User-Agent", "rsopencode-updater")
+        .send()
+        .await?;
+    let body: serde_json::Value = resp.json().await?;
+    let tag = body
+        .get("tag_name")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("missing tag_name in release"))?
+        .to_string();
+    let assets = body
+        .get("assets")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|a| {
+                    let name = a.get("name")?.as_str()?.to_string();
+                    let url = a.get("browser_download_url")?.as_str()?.to_string();
+                    Some(ReleaseAsset { name, url })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(ReleaseInfo { tag, assets })
+}
+
+async fn download_asset(url: &str) -> Result<Vec<u8>> {
+    let client = reqwest::Client::new();
+    let bytes = client
+        .get(url)
+        .header("User-Agent", "rsopencode-updater")
+        .send()
+        .await?
+        .bytes()
+        .await?;
+    Ok(bytes.to_vec())
+}
+
+/// Extract the `rsopencode` binary from a tar.gz release archive.
+fn extract_binary_from_targz(data: &[u8], bin_name: &str) -> Result<Vec<u8>> {
+    use std::io::Read;
+    let gz = flate2::read::GzDecoder::new(data);
+    let mut tar = tar::Archive::new(gz);
+    for entry in tar.entries()? {
+        let mut entry = entry?;
+        let path = entry.path()?;
+        let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+        if name == bin_name {
+            let mut buf = Vec::new();
+            entry.read_to_end(&mut buf)?;
+            return Ok(buf);
+        }
+    }
+    anyhow::bail!("binary '{}' not found in archive", bin_name);
+}
+
+/// Replace the running executable. Writes to a temp file next to the target,
+/// then renames over it (atomic on Unix).
+fn replace_executable(target: &std::path::Path, new_bytes: &[u8]) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = target.with_extension("rsopencode-new");
+    std::fs::write(&tmp, new_bytes)?;
+    let mut perms = std::fs::metadata(&tmp)?.permissions();
+    perms.set_mode(0o755);
+    std::fs::set_permissions(&tmp, perms)?;
+    std::fs::rename(&tmp, target)?;
+    Ok(())
+}
+
+/// Return the Rust target triple matching this binary, e.g.
+/// `aarch64-unknown-linux-gnu`.
+fn update_target_triple() -> String {
+    let arch = if cfg!(target_arch = "x86_64") {
+        "x86_64"
+    } else if cfg!(target_arch = "aarch64") {
+        "aarch64"
+    } else {
+        "x86_64"
+    };
+    let os = if cfg!(target_os = "linux") {
+        "unknown-linux-gnu"
+    } else if cfg!(target_os = "macos") {
+        "apple-darwin"
+    } else if cfg!(target_os = "windows") {
+        "pc-windows-msvc"
+    } else {
+        "unknown-linux-gnu"
+    };
+    format!("{}-{}", arch, os)
 }

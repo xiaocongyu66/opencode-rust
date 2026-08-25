@@ -684,6 +684,31 @@ impl App {
                     self.sidebar.tool_call_count = self.tool_call_count;
                     self.sidebar.step_count = self.step_count;
                 }
+                RunnerEvent::CompactionNeeded { tier, used, effective } => {
+                    // Surface compaction pressure to the user (claude-code-book Ch07).
+                    use crate::core::session::compaction::CompactionTier;
+                    let pct = if effective > 0 {
+                        (used as f64 / effective as f64 * 100.0) as u64
+                    } else { 0 };
+                    let (msg, variant) = match tier {
+                        CompactionTier::Warning => (
+                            format!("Context at {}% — consider /compact", pct),
+                            crate::tui::component::toast::ToastVariant::Warning,
+                        ),
+                        CompactionTier::AutoCompact => (
+                            format!("Context at {}% — auto-compacting", pct),
+                            crate::tui::component::toast::ToastVariant::Warning,
+                        ),
+                        CompactionTier::Blocking => (
+                            format!("Context at {}% — blocked, compact needed", pct),
+                            crate::tui::component::toast::ToastVariant::Error,
+                        ),
+                        CompactionTier::None => (String::new(), crate::tui::component::toast::ToastVariant::Info),
+                    };
+                    if !msg.is_empty() {
+                        self.toast_manager.show(msg, variant);
+                    }
+                }
                 RunnerEvent::Error { message } => {
                     self.messages.push(ChatMessage::new(
                         MessageRole::System,
