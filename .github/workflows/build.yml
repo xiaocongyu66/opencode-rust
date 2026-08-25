@@ -1,0 +1,90 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64 — native
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-22.04
+            cross: false
+          # Linux aarch64 — cross-compile from x86_64 ubuntu
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-22.04
+            cross: true
+          # macOS Intel
+          - target: x86_64-apple-darwin
+            runner: macos-13
+            cross: false
+          # macOS Apple Silicon — native (macos-14 is arm64)
+          - target: aarch64-apple-darwin
+            runner: macos-14
+            cross: false
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compile toolchain (linux aarch64)
+        if: matrix.cross
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Configure cargo for cross-compile (linux aarch64)
+        if: matrix.cross
+        run: |
+          mkdir -p ~/.cargo
+          printf '[target.aarch64-unknown-linux-gnu]\nlinker = "aarch64-linux-gnu-gcc"\n' > ~/.cargo/config.toml
+
+      - name: Cargo cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ". -> target"
+          key: ${{ matrix.target }}
+
+      - name: Build (release)
+        env:
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          CXX_aarch64_unknown_linux_gnu: aarch64-linux-gnu-g++
+          AR_aarch64_unknown_linux_gnu: aarch64-linux-gnu-ar
+        run: cargo build --release --target ${{ matrix.target }} -p rsopencode
+
+      - name: Strip binary
+        if: runner.os != 'Windows'
+        run: strip target/${{ matrix.target }}/release/rsopencode || true
+
+      # Package & upload artifacts on push to main and manual runs (not PRs).
+      - name: Package (tar.gz)
+        if: github.event_name != 'pull_request'
+        run: |
+          mkdir -p staging
+          cp target/${{ matrix.target }}/release/rsopencode staging/
+          cp README.md staging/ 2>/dev/null || true
+          cp LICENSE staging/ 2>/dev/null || true
+          cd staging
+          tar czf ../rsopencode-${{ matrix.target }}.tar.gz *
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: rsopencode-${{ matrix.target }}
+          path: rsopencode-${{ matrix.target }}.tar.gz
+          retention-days: 30
+          compression-level: 0

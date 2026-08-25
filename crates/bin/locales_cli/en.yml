@@ -1,0 +1,28 @@
+en:
+  cli:
+    description: "OpenCode 2.0 preview command line interface"
+    api:
+      description: "Make a request to the running server"
+    debug:
+      description: "Debugging and troubleshooting tools"
+    agents: "List all agents"
+    migrate: "Migrate v1 data to v2"
+    service:
+      description: "Manage the background server"
+      start: "Start the background server"
+      restart: "Restart the background server"
+      status: "Show background server status"
+      stop: "Stop the background server"
+      password: "Get or set the server password"
+    serve: "Start the v2 API server"
+    error:
+      server_not_running: "Server is not running. Start it with 'opencode serve' or 'opencode service start'."
+      connection_failed: "Failed to connect to server"
+      auth_failed: "Authentication failed"
+      invalid_response: "Invalid response from server"
+    status:
+      running: "Server is running"
+      stopped: "Server is stopped"
+      pid: "PID: %{pid}"
+      port: "Port: %{port}"
+      uptime: "Uptime: %{uptime}"

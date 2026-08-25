@@ -1,0 +1,50 @@
+en:
+  tui:
+    title: "OpenCode"
+    prompt:
+      placeholder: "Send a message..."
+      clear: "Clear prompt"
+      send: "Send"
+    session:
+      new: "New session"
+      list: "Sessions"
+      archive: "Archive session"
+      restore: "Restore session"
+      empty: "No sessions yet"
+    agent:
+      switch: "Switch agent"
+      build: "Build"
+      plan: "Plan"
+      general: "General"
+    model:
+      switch: "Switch model"
+      current: "Current model: %{model}"
+    workspace:
+      choose: "Choose workspace"
+      change: "Change the workspace for the session"
+      cancel_restore: "Cancel workspace restore"
+      choose_all: "Choose from all workspaces"
+    provider:
+      connect: "Connect provider"
+      connect_prompt: "Connect a provider to send prompts"
+      authorization_code: "Authorization code"
+      copy_code: "Copy provider code"
+      copied: "Copied to clipboard"
+    error:
+      unknown: "An unknown error occurred."
+      retry: "Confirm retry option"
+      recovery: "Confirm recovery option"
+    common:
+      cancel: "Cancel"
+      confirm: "Confirm"
+      copy_debug: "Copy debug info"
+      copy_report: "Copy report"
+      commands: "Commands"
+      autocomplete: "Autocomplete"
+      complete_item: "Complete autocomplete item"
+    status:
+      thinking: "Thinking..."
+      connecting: "Connecting..."
+      idle: "Idle"
+      busy: "Busy"
+      error: "Error"

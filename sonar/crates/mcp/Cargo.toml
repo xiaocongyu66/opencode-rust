@@ -1,0 +1,23 @@
+[package]
+name = "sonar-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "MCP server for sonar code search. Drop-in compatible with semble. Works with Claude Code, Cursor, Codex, OpenCode."
+keywords = ["mcp", "code-search", "agents", "mcp-server", "embeddings"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "sonar-mcp"
+path = "src/main.rs"
+
+[dependencies]
+sonar-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+notify.workspace = true

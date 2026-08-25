@@ -1,0 +1,50 @@
+zh:
+  tui:
+    title: "OpenCode"
+    prompt:
+      placeholder: "输入消息..."
+      clear: "清空输入"
+      send: "发送"
+    session:
+      new: "新建会话"
+      list: "会话列表"
+      archive: "归档会话"
+      restore: "恢复会话"
+      empty: "暂无会话"
+    agent:
+      switch: "切换代理"
+      build: "构建"
+      plan: "规划"
+      general: "通用"
+    model:
+      switch: "切换模型"
+      current: "当前模型: %{model}"
+    workspace:
+      choose: "选择工作区"
+      change: "切换会话工作区"
+      cancel_restore: "取消恢复工作区"
+      choose_all: "从所有工作区中选择"
+    provider:
+      connect: "连接服务商"
+      connect_prompt: "连接服务商以发送消息"
+      authorization_code: "授权码"
+      copy_code: "复制服务商代码"
+      copied: "已复制到剪贴板"
+    error:
+      unknown: "发生未知错误。"
+      retry: "确认重试选项"
+      recovery: "确认恢复选项"
+    common:
+      cancel: "取消"
+      confirm: "确认"
+      copy_debug: "复制调试信息"
+      copy_report: "复制报告"
+      commands: "命令"
+      autocomplete: "自动补全"
+      complete_item: "补全选中项"
+    status:
+      thinking: "思考中..."
+      connecting: "连接中..."
+      idle: "空闲"
+      busy: "忙碌"
+      error: "错误"

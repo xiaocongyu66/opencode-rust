@@ -1,0 +1,21 @@
+[package]
+name = "opencode-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description.workspace = true
+
+[dependencies]
+opencode-schema.workspace = true
+opencode-llm.workspace = true
+opencode-tools.workspace = true
+opencode-protocol.workspace = true
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+reqwest.workspace = true
+async-trait.workspace = true

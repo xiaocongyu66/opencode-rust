@@ -1,0 +1,25 @@
+[package]
+name = "sonar-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Fast hybrid code search CLI for agents. Rust translation of semble. BM25 + vector, tree-sitter chunking, zero setup."
+keywords = ["code-search", "agents", "cli", "embeddings", "bm25"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "sonar"
+path = "src/main.rs"
+
+[dependencies]
+sonar-core.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+ctrlc.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,17 @@
+# Rust
+/target
+**/target
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# TS original (not part of Rust build, too large to track)
+/opencode

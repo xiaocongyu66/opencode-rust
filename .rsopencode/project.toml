@@ -1,0 +1,22 @@
+# rsopencode 项目配置文件
+# 放在 .rsopencode/project.toml，可提交到版本控制共享给团队
+#
+# 取消注释并修改以下配置项以覆盖全局配置。
+
+# 项目模型覆盖
+# model = "anthropic/claude-sonnet-4-5"
+
+# 项目 agent 覆盖
+# defaultAgent = "build"
+
+# 项目 shell 覆盖
+# shell = "zsh"
+
+# 指令文件路径 (相对于项目根目录)
+# instructions = ["AGENTS.md"]
+
+# 启用的技能
+# skills = ["code-review"]
+
+# 是否启用文件快照
+# snapshots = true

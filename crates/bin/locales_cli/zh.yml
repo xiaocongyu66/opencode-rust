@@ -1,0 +1,28 @@
+zh:
+  cli:
+    description: "OpenCode 2.0 预览版命令行工具"
+    api:
+      description: "向运行中的服务器发送请求"
+    debug:
+      description: "调试和故障排除工具"
+    agents: "列出所有代理"
+    migrate: "将 v1 数据迁移至 v2"
+    service:
+      description: "管理后台服务器"
+      start: "启动后台服务器"
+      restart: "重启后台服务器"
+      status: "查看后台服务器状态"
+      stop: "停止后台服务器"
+      password: "获取或设置服务器密码"
+    serve: "启动 v2 API 服务器"
+    error:
+      server_not_running: "服务器未运行。请使用 'opencode serve' 或 'opencode service start' 启动。"
+      connection_failed: "无法连接到服务器"
+      auth_failed: "身份验证失败"
+      invalid_response: "服务器响应无效"
+    status:
+      running: "服务器正在运行"
+      stopped: "服务器已停止"
+      pid: "进程号: %{pid}"
+      port: "端口: %{port}"
+      uptime: "运行时间: %{uptime}"

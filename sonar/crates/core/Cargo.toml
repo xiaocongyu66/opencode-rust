@@ -1,0 +1,30 @@
+[package]
+name = "sonar-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Fast hybrid code search engine for agents: tree-sitter chunking, BM25, static embeddings, RRF. Rust translation of semble."
+keywords = ["code-search", "embeddings", "agents", "mcp", "bm25"]
+categories = ["development-tools", "text-processing"]
+
+[dependencies]
+tree-sitter.workspace = true
+tree-sitter-python.workspace = true
+tree-sitter-rust.workspace = true
+tree-sitter-typescript.workspace = true
+tree-sitter-javascript.workspace = true
+tree-sitter-go.workspace = true
+tree-sitter-java.workspace = true
+model2vec-rs.workspace = true
+ordered-float.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+blake3.workspace = true
+ignore.workspace = true
+regex.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+notify.workspace = true
+dirs.workspace = true
+tempfile = "3"
