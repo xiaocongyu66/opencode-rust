@@ -579,22 +579,23 @@ impl App {
                     // block-quote on ReasoningDone to avoid per-chunk
                     // block-quote prefixes and extra blank lines.
                     self.current_reasoning_text.push_str(&text);
+                    // Also push incrementally to the assistant message so the
+                    // user sees streaming thinking (not just the final block).
+                    // Without this the view appears stuck during long thinking.
+                    if let Some(last) = self.messages.last_mut() {
+                        if last.role == MessageRole::Assistant {
+                            last.push_text(text);
+                        }
+                    }
                 }
                 RunnerEvent::ReasoningDone { .. } => {
-                    // Render the accumulated reasoning as a single block-quote
-                    // so it reads as one continuous muted block.
-                    if !self.current_reasoning_text.is_empty() {
-                        let reasoning = std::mem::take(&mut self.current_reasoning_text);
-                        // Build a markdown block-quote: prefix every line with "> ".
-                        let quoted: String = reasoning
-                            .lines()
-                            .map(|l| format!("> {l}"))
-                            .collect::<Vec<_>>()
-                            .join("\n");
-                        if let Some(last) = self.messages.last_mut() {
-                            if last.role == MessageRole::Assistant {
-                                last.push_text(&format!("✻ Thinking:\n{quoted}\n\n"));
-                            }
+                    // Reasoning was already streamed incrementally to the
+                    // assistant message in ReasoningDelta. Just clear the
+                    // accumulator and add a trailing newline for separation.
+                    self.current_reasoning_text.clear();
+                    if let Some(last) = self.messages.last_mut() {
+                        if last.role == MessageRole::Assistant {
+                            last.push_text("\n");
                         }
                     }
                 }

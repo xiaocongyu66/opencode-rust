@@ -265,7 +265,14 @@ fn render_session(f: &mut Frame, app: &mut App) {
     // While the assistant is thinking, show a spinner line at the end.
     // Uses the spinner's current mode (thinking/tool-use/responding) to pick
     // a color and verb label — mirrors claude-code-best's Spinner component.
-    if app.is_thinking || app.spinner_active {
+    //
+    // Only append the spinner row when there is no streaming assistant text
+    // yet. Once text is arriving (current_assistant_text non-empty), the
+    // assistant message in `app.messages` already holds the partial text and
+    // auto-follow will pin to the bottom of it. Adding a spinner row below
+    // that would push the real content up and make it look like the view is
+    // stuck — the "can't scroll to see the latest" bug.
+    if (app.is_thinking || app.spinner_active) && app.current_assistant_text.is_empty() {
         lines.push(Line::from(""));
         let spinner_fg = app.spinner.mode.color(&theme);
         lines.push(Line::from(vec![
