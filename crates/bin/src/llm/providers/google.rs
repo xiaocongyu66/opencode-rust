@@ -1,7 +1,7 @@
 //! Google Gemini provider.
 use async_trait::async_trait;
 use crate::llm::provider::LlmProvider;
-use crate::llm::schema::{ContentPart, FinishReason, LlmError, LlmRequest, LlmResponse, Message, MessageRole, Usage};
+use crate::llm::schema::{ContentPart, FinishReason, LlmError, LlmRequest, LlmResponse, Message, MessageRole};
 
 pub struct GoogleProvider { api_key: String, client: reqwest::Client }
 impl GoogleProvider {

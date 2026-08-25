@@ -2,7 +2,7 @@
 use async_trait::async_trait;
 use crate::llm::openai_api::*;
 use crate::llm::provider::LlmProvider;
-use crate::llm::schema::{ContentPart, FinishReason, LlmError, LlmRequest, LlmResponse, Message, MessageRole, Usage};
+use crate::llm::schema::{ContentPart, FinishReason, LlmError, LlmRequest, LlmResponse, Message, MessageRole};
 
 pub struct CloudflareProvider { api_key: String, account_id: String, client: reqwest::Client }
 impl CloudflareProvider {

@@ -13,7 +13,7 @@
 //! }
 //! ```
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use async_trait::async_trait;

@@ -8,7 +8,7 @@ use crate::llm::openai_api::*;
 use crate::llm::provider::LlmProvider;
 use crate::llm::schema::{
     ContentPart, FinishReason, LlmError, LlmEvent, LlmRequest, LlmResponse, Message, MessageRole,
-    ToolCallPart, ToolResultPart, ToolResultValue, Usage,
+    ToolCallPart,
 };
 
 pub struct OpenAIProvider {

@@ -11,10 +11,11 @@ license = "Apache-2.0"
 description = "AI-powered development tool"
 
 [profile.release]
-opt-level = 3
+opt-level = "z"
 lto = true
 codegen-units = 1
-strip = true
+strip = "symbols"
+panic = "abort"
 
 [profile.dev]
 opt-level = 0
