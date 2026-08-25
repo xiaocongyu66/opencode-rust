@@ -89,6 +89,17 @@ impl ScrollView {
         self.scroll_subpixel = 0.0;
     }
 
+    /// Called after content changes (new message, text delta, etc.). If the
+    /// view was already at the bottom, follow the new content. Otherwise
+    /// keep the user's scroll position. This is the tui4j-style "stay at
+    /// bottom if at bottom" behavior without a separate auto_follow flag
+    /// — but we keep the flag for compatibility.
+    pub fn on_content_changed(&mut self) {
+        if self.is_at_bottom() {
+            self.auto_follow = true;
+        }
+    }
+
     /// Jump to an absolute line offset, clamped to [0, max_scroll].
     pub fn scroll_to(&mut self, line: usize) {
         self.auto_follow = false;
