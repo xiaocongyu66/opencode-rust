@@ -273,12 +273,22 @@ impl SessionRunner {
                     tracing::warn!(
                         session_id = %session_id,
                         used, effective,
-                        "context budget blocking; skipping step"
+                        "context budget blocking; stopping run"
                     );
                     // In Blocking tier we refuse to start a new step to avoid
                     // overflowing the model window. The actual LLM summarization
-                    // is a follow-up; for now emit and break to avoid runaway.
-                    break;
+                    // is a follow-up; for now emit Done and return.
+                    let run_result = RunResult {
+                        steps: step.saturating_sub(1),
+                        cost: total_cost,
+                        input_tokens: total_input_tokens,
+                        output_tokens: total_output_tokens,
+                        finish_reason: FinishReason::Interrupted,
+                    };
+                    if let Some(tx) = &tx {
+                        let _ = tx.send(RunnerEvent::Done { result: run_result.clone() }).await;
+                    }
+                    return Ok(run_result);
                 }
             }
 
@@ -387,6 +397,7 @@ impl SessionRunner {
             let mut part = SystemPart::new(system_prompt);
             part.cache = Some(crate::llm::schema::CacheHint {
                 r#type: crate::llm::schema::CacheHintType::Ephemeral,
+                ttl_seconds: None,
             });
             vec![part]
         };
