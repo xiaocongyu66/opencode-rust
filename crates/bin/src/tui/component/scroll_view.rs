@@ -11,7 +11,7 @@ use ratatui::text::Line;
 use ratatui::widgets::{Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState, Wrap};
 use ratatui::Frame;
 
-use crate::tui::util::scroll::MacOSScrollAccel;
+use crate::tui::util::scroll::{MacOSScrollAccel, ScrollAcceleration};
 
 /// Natural-scroll scroll view for a list of rendered lines.
 pub struct ScrollView {
@@ -108,7 +108,7 @@ impl ScrollView {
         let lines = self.scroll_subpixel.floor() as i64;
         if lines != 0 {
             if lines < 0 {
-                self.scroll = self.scroll.saturating_sub(lines.unsigned_abs());
+                self.scroll = self.scroll.saturating_sub(lines.unsigned_abs() as usize);
             } else {
                 self.scroll = self.scroll.saturating_add(lines as usize);
             }
@@ -180,7 +180,7 @@ impl ScrollView {
         if lines > 0 {
             self.scroll = self.scroll.saturating_add(lines as usize).min(self.max_scroll);
         } else {
-            self.scroll = self.scroll.saturating_sub(lines.unsigned_abs());
+            self.scroll = self.scroll.saturating_sub(lines.unsigned_abs() as usize);
         }
         self.scroll_subpixel = 0.0;
     }

@@ -555,7 +555,7 @@ impl App {
                     if needs_new {
                         self.messages.push(ChatMessage::new(MessageRole::Assistant, String::new()));
                     }
-                    self.follow_if_at_bottom();
+                    self.messages_scroll.follow_if_at_bottom();
                     self.step_count += 1;
                     self.sidebar.context_tokens = self.total_input_tokens + self.total_output_tokens;
                     self.sidebar.tool_call_count = self.tool_call_count;
@@ -613,14 +613,14 @@ impl App {
                     if let Some(last) = self.messages.last_mut() {
                         if last.role == MessageRole::Assistant {
                             last.push_tool(tool_name, call_id, state);
-                            self.follow_if_at_bottom();
+                            self.messages_scroll.follow_if_at_bottom();
                             continue;
                         }
                     }
                     let mut msg = ChatMessage::new(MessageRole::Assistant, String::new());
                     msg.push_tool(tool_name, call_id, state);
                     self.messages.push(msg);
-                    self.follow_if_at_bottom();
+                    self.messages_scroll.follow_if_at_bottom();
                 }
                 RunnerEvent::ToolSuccess { tool_name, call_id, summary } => {
                     let new_state = ToolPartState::Completed {
@@ -643,7 +643,7 @@ impl App {
                         // text-only renderers reflect the new state.
                         refresh_message_text(self.messages.last_mut().unwrap());
                     }
-                    self.follow_if_at_bottom();
+                    self.messages_scroll.follow_if_at_bottom();
                     // Tool done — go back to thinking while LLM continues.
                     self.footer.status = crate::t!("tui.status.thinking").to_string();
                     self.spinner.set_mode(crate::tui::component::spinner::SpinnerMode::Thinking);
@@ -666,7 +666,7 @@ impl App {
                     } else {
                         refresh_message_text(self.messages.last_mut().unwrap());
                     }
-                    self.follow_if_at_bottom();
+                    self.messages_scroll.follow_if_at_bottom();
                     self.footer.status = crate::t!("tui.status.thinking").to_string();
                     self.spinner.set_mode(crate::tui::component::spinner::SpinnerMode::Thinking);
                     self.spinner.pick_new_verb();
@@ -689,7 +689,7 @@ impl App {
                         MessageRole::System,
                         crate::t!("tui.message.error", message = message).to_string(),
                     ));
-                    self.follow_if_at_bottom();
+                    self.messages_scroll.follow_if_at_bottom();
                     self.is_thinking = false;
                     self.spinner_active = false;
                     self.footer.status = crate::t!("tui.status.error").to_string();
