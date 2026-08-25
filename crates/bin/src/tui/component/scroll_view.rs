@@ -74,8 +74,12 @@ impl ScrollView {
     }
 
     /// Pin to the bottom unconditionally (e.g. on user submit / resume).
+    /// Resets scroll so the next render pins to max_scroll regardless of
+    /// where the user previously scrolled.
     pub fn scroll_to_bottom(&mut self) {
         self.auto_follow = true;
+        self.scroll = 0;
+        self.scroll_subpixel = 0.0;
     }
 
     /// Pin to the top.
