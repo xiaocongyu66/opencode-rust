@@ -309,6 +309,7 @@ impl LlmProvider for OpenAICompatibleProvider {
         let mut stream = resp.bytes_stream();
         let mut buf = String::new();
         let mut chunk_count = 0u32;
+        let mut done_received = false;
         while let Some(chunk) = stream.next().await {
             chunk_count += 1;
             buf.push_str(&String::from_utf8_lossy(&chunk.map_err(|e| LlmError::network(e.to_string()))?));
@@ -317,6 +318,7 @@ impl LlmProvider for OpenAICompatibleProvider {
                 buf = buf[pos + 1..].to_string();
                 if let Some(data) = line.strip_prefix("data: ") {
                     if data == "[DONE]" {
+                        done_received = true;
                         continue;
                     }
                     if let Ok(c) = serde_json::from_str::<ChatCompletionChunk>(data) {
@@ -384,6 +386,18 @@ impl LlmProvider for OpenAICompatibleProvider {
                     }
                 }
             }
+        }
+
+        // Detect mid-stream truncation: if the server closed the connection
+        // without sending the [DONE] sentinel, the response was likely cut off
+        // by an upstream error (timeout, rate limit, proxy reset). Without this
+        // check the TUI would silently stop receiving events and stay stuck in
+        // "thinking" forever with no error shown.
+        if !done_received && (text_started || reasoning_started || !pending_tool_calls.is_empty()) {
+            tracing::warn!("[DBG] stream_events: stream ended without [DONE] sentinel (possible truncation)");
+            return Err(LlmError::provider(
+                "Stream ended prematurely (no [DONE] sentinel). The API may have timed out, hit a rate limit, or been reset by a proxy. Try again.".to_string()
+            ));
         }
 
         if reasoning_started {

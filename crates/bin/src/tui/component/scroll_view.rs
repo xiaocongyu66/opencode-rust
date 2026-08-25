@@ -53,7 +53,7 @@ impl ScrollView {
             auto_follow: true,
             max_scroll: 0,
             accel: MacOSScrollAccel::new(),
-            show_scrollbar: true,
+            show_scrollbar: false,
             scrollbar_area: None,
             drag_last_row: None,
             drag_on_scrollbar: false,
