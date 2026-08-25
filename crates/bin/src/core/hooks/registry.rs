@@ -38,7 +38,7 @@ pub struct HookConfig {
     /// Shell command to execute.
     pub command: String,
     /// Timeout in ms (default 2000).
-    #[serde(default = "default_timeout_ms")]
+    #[serde(default)]
     pub timeout_ms: u64,
     /// Status message shown while running.
     #[serde(default)]
@@ -48,8 +48,15 @@ pub struct HookConfig {
     pub once: bool,
 }
 
-fn default_timeout_ms() -> u64 {
-    2000
+impl Default for HookConfig {
+    fn default() -> Self {
+        Self {
+            command: String::new(),
+            timeout_ms: 2000,
+            message: None,
+            once: false,
+        }
+    }
 }
 
 /// One matcher entry: "when event X targets tool Y, run these hooks".
