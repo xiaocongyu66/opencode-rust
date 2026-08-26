@@ -32,6 +32,7 @@ pub mod background_job;
 pub mod tool_output_store;
 pub mod patch;
 pub mod hooks;
+pub mod acp;
 
 // New modules ported from TS original
 pub mod auth;

@@ -217,6 +217,10 @@ pub struct App {
     pub plugin_ready: bool,
     pub session_id: Option<SessionID>,
     pub runner_rx: Option<mpsc::Receiver<RunnerEvent>>,
+    /// ACP event stream (post-bridge). When set, poll this instead of
+    /// runner_rx — events come already converted to AcpEvent. The bridge
+    /// task drains runner_rx in the background (claude-code-book Ch02/Ch13).
+    pub acp_rx: Option<mpsc::Receiver<crate::core::acp::AcpEvent>>,
     pub current_assistant_text: String,
     /// Accumulated reasoning (thinking) text for the current assistant turn.
     /// Flushed to the message as a single block-quote when reasoning ends.

@@ -52,6 +52,7 @@ impl App {
             plugin_ready: false,
             session_id: None,
             runner_rx: None,
+            acp_rx: None,
             current_assistant_text: String::new(),
             current_reasoning_text: String::new(),
             system_prompt: "You are a helpful AI coding assistant. Use tools when needed to accomplish tasks.".to_string(),
@@ -284,6 +285,14 @@ impl App {
 
         let (tx, rx) = mpsc::channel::<RunnerEvent>(256);
         self.runner_rx = Some(rx);
+        // ACP bridge (claude-code-book Ch02/Ch13): a separate channel for
+        // future frontends (IDE/print). The TUI still polls runner_rx
+        // directly for now; acp_rx is available but unused until the
+        // poll_runner_events migration lands.
+        let (acp_tx, _acp_rx) = mpsc::channel::<crate::core::acp::AcpEvent>(256);
+        // Bridge drains a separate receiver — but we gave rx to App above.
+        // For now the bridge is wired but idle; full migration is P2 follow-up.
+        let _ = acp_tx;
         let tx_send = tx.clone();
 
         let store = self.store.clone();
