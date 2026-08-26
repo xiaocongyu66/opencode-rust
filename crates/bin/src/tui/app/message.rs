@@ -5,7 +5,7 @@
 //! flattened for TUI rendering. Kept in a separate module so `app.rs`
 //! stays focused on App state and event handling.
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum MessageRole {
     User,
     Assistant,

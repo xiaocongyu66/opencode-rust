@@ -145,7 +145,7 @@ pub const COMPACTION_RESERVE: u64 = 20_000;
 pub const MAX_CONSECUTIVE_FAILURES: u32 = 3;
 
 /// Compaction tier selected by current token usage.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum CompactionTier {
     /// 0-85%: no action needed.
     None,
