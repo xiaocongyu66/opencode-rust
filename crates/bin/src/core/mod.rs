@@ -13,6 +13,7 @@ pub mod credential;
 pub mod filesystem;
 pub mod git;
 pub mod permission;
+pub mod permission_classifier;
 pub mod integration;
 pub mod skill;
 pub mod event;
