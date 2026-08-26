@@ -38,19 +38,11 @@ pub async fn run_hook(config: &HookConfig, input: &HookInput) -> anyhow::Result<
         let _ = stdin.shutdown().await;
     }
 
-    // Use select! so we can kill the child on timeout without moving it
-    // into wait_with_output (which takes self).
-    let mut child = child;
-    let result = tokio::select! {
-        biased;
-        output = child.wait_with_output() => output,
-        _ = tokio::time::sleep(limit) => {
-            let _ = child.start_kill();
-            return Ok(HookOutput::default());
-        }
-    };
+    // Take stdout handle before moving child into wait_with_output.
+    let stdout_handle = child.stdout.take();
+    let result = tokio::time::timeout(limit, child.wait_with_output()).await;
     match result {
-        Ok(out) => {
+        Ok(Ok(out)) => {
             let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
             if stdout.is_empty() {
                 return Ok(HookOutput::default());
@@ -64,7 +56,14 @@ pub async fn run_hook(config: &HookConfig, input: &HookInput) -> anyhow::Result<
                 }
             }
         }
-        Err(e) => Err(anyhow::anyhow!("hook process error: {}", e)),
+        Ok(Err(e)) => Err(anyhow::anyhow!("hook process error: {}", e)),
+        Err(_) => {
+            // Timed out. The timeout future is dropped, which drops
+            // wait_with_output's future, which kills the child process.
+            // We don't touch child here (it was moved into the future).
+            let _ = stdout_handle; // suppress unused
+            Ok(HookOutput::default())
+        }
     }
 }
 
