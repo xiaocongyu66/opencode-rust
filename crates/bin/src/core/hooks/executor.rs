@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
-use tokio::time::timeout;
+// tokio::time::sleep used via full path in select! below
 
 use super::protocol::{HookDecision, HookInput, HookOutput};
 use super::registry::HookConfig;
@@ -38,9 +38,19 @@ pub async fn run_hook(config: &HookConfig, input: &HookInput) -> anyhow::Result<
         let _ = stdin.shutdown().await;
     }
 
-    let result = timeout(limit, child.wait_with_output()).await;
+    // Use select! so we can kill the child on timeout without moving it
+    // into wait_with_output (which takes self).
+    let mut child = child;
+    let result = tokio::select! {
+        biased;
+        output = child.wait_with_output() => output,
+        _ = tokio::time::sleep(limit) => {
+            let _ = child.start_kill();
+            return Ok(HookOutput::default());
+        }
+    };
     match result {
-        Ok(Ok(out)) => {
+        Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
             if stdout.is_empty() {
                 return Ok(HookOutput::default());
@@ -54,12 +64,7 @@ pub async fn run_hook(config: &HookConfig, input: &HookInput) -> anyhow::Result<
                 }
             }
         }
-        Ok(Err(e)) => Err(anyhow::anyhow!("hook process error: {}", e)),
-        Err(_) => {
-            // Timed out — kill the child and treat as passthrough.
-            let _ = child.start_kill();
-            Ok(HookOutput::default())
-        }
+        Err(e) => Err(anyhow::anyhow!("hook process error: {}", e)),
     }
 }
 
