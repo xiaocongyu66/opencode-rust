@@ -602,20 +602,20 @@ impl SessionRunner {
                                     // three-layer permission pipeline (Ch03/Ch04):
                                     // validate_input → check_permissions → execute.
                                     use crate::tools::tool::{PermissionDecision, ToolFailure};
-                                    // Layer 1: input validation (fail fast).
-                                    if let Err(msg) = tools.validate(name, &input) {
+                                    // Layer 1: input validation (fail fast, synchronous).
+                                    let validated = tools.validate(name, &input);
+                                    if let Err(msg) = validated {
                                         Err(ToolFailure::Message(format!("invalid input: {}", msg)))
                                     } else {
-                                        // Layer 2-3: tool-specific permission check.
-                                        match tools.check_perms(name, &input) {
+                                        // Layer 2-3: tool-specific permission check
+                                        // (synchronous, returns immediately).
+                                        let perm = tools.check_perms(name, &input);
+                                        match perm {
                                             PermissionDecision::Deny(reason) => {
                                                 Err(ToolFailure::Message(reason))
                                             }
-                                            PermissionDecision::Allow => {
-                                                tools.execute(name, input.clone(), &ctx).await
-                                            }
-                                            PermissionDecision::Ask => {
-                                                // Auto-allow in non-interactive runs for now;
+                                            PermissionDecision::Allow | PermissionDecision::Ask => {
+                                                // Ask auto-allows in non-interactive runs;
                                                 // the TUI layer handles interactive prompts.
                                                 tools.execute(name, input.clone(), &ctx).await
                                             }
