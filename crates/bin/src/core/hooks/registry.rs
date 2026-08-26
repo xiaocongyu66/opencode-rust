@@ -1,6 +1,6 @@
 //! Hook registry — 6-layer priority chain (claude-code-book Ch08).
 //!
-//! Priority (low → high): plugin < user < project < local < flag < policy.
+//! Priority (low to high): plugin < user < project < local < flag < policy.
 //! Later layers override earlier ones; hooks at the same event+matcher
 //! run in registration order within a layer.
 
@@ -67,11 +67,11 @@ pub struct HookEntry {
     pub hooks: Vec<HookConfig>,
 }
 
-/// Layered registry of all hooks. Inner map: event_name → list of entries
+/// Layered registry of all hooks. Inner map: event_name -> list of entries
 /// (across layers). At dispatch time we flatten by layer priority.
 #[derive(Default)]
 pub struct HookRegistry {
-    /// event → (layer → entries)
+    /// event -> (layer -> entries)
     entries: HashMap<String, HashMap<HookLayer, Vec<HookEntry>>>,
 }
 
@@ -89,7 +89,7 @@ impl HookRegistry {
     }
 
     /// Load hooks for an event from a config file at the given layer.
-    /// File format: `{ "<EventName>": [ { "matcher": "...", "hooks": [...] } ] }`
+    /// File format: `{ "EventName": [ { "matcher": "...", "hooks": [...] } ] }`
     pub fn load_file(&mut self, path: &PathBuf, layer: HookLayer) -> anyhow::Result<()> {
         let content = std::fs::read_to_string(path)?;
         let map: HashMap<String, Vec<HookEntry>> = serde_json::from_str(&content)?;
@@ -153,7 +153,7 @@ mod tests {
         assert!(matcher_hits("Bash,Write", Some("Write")));
         assert!(!matcher_hits("Bash", Some("Write")));
         assert!(!matcher_hits("Bash", None));
-        assert!(matcher_hits("", None)); // empty matches all, even no tool
+        assert!(matcher_hits("", None));
     }
 
     #[test]
@@ -184,7 +184,7 @@ mod tests {
                     once: false,
                 }],
             }],
-        ]);
+        );
         let input = HookInput {
             event: "PreToolUse".into(),
             tool: Some("Bash".into()),
@@ -194,7 +194,6 @@ mod tests {
         };
         let chain = reg.resolve(&input);
         assert_eq!(chain.len(), 2);
-        // User comes before Policy in the layer order, regardless of registration.
         assert_eq!(chain[0].command, "user-hook");
         assert_eq!(chain[1].command, "policy-hook");
     }
