@@ -562,7 +562,7 @@ impl App {
                         self.messages.push(ChatMessage::new(MessageRole::Assistant, String::new()));
                     }
                     self.messages_scroll.follow_if_at_bottom();
-                    self.step_count = step;
+                    self.step_count = step as u64;
                     self.sidebar.context_tokens = self.total_input_tokens + self.total_output_tokens;
                     self.sidebar.tool_call_count = self.tool_call_count;
                     self.sidebar.step_count = self.step_count;

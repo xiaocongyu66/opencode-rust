@@ -28,14 +28,16 @@ fn registry() -> Arc<RwLock<HashSet<String>>> {
 /// Register a background agent. Called when a sub-agent spawns with
 /// `run_in_background: true`.
 pub fn register(agent_id: &str) {
-    let mut set = registry().write();
+    let reg = registry();
+    let mut set = reg.write();
     set.insert(agent_id.to_string());
     tracing::debug!(agent_id, "bg agent registered");
 }
 
 /// Unregister a background agent. Called when the agent finishes or errors.
 pub fn unregister(agent_id: &str) {
-    let mut set = registry().write();
+    let reg = registry();
+    let mut set = reg.write();
     set.remove(agent_id);
     tracing::debug!(agent_id, "bg agent unregistered");
 }
@@ -43,19 +45,22 @@ pub fn unregister(agent_id: &str) {
 /// Check if an agent is currently running in the background.
 /// Used by the event router to decide where to send the agent's chunks.
 pub fn is_background(agent_id: &str) -> bool {
-    let set = registry().read();
+    let reg = registry();
+    let set = reg.read();
     set.contains(agent_id)
 }
 
 /// Snapshot of all currently-registered bg agent IDs.
 pub fn all() -> Vec<String> {
-    let set = registry().read();
+    let reg = registry();
+    let set = reg.read();
     set.iter().cloned().collect()
 }
 
 /// Clear all bg agents (e.g. on session reset / full interrupt).
 pub fn clear() {
-    let mut set = registry().write();
+    let reg = registry();
+    let mut set = reg.write();
     set.clear();
 }
 
