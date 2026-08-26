@@ -27,7 +27,35 @@ impl ToolRegistry {
     }
 
     pub fn get(&self, name: &str) -> Option<&dyn Tool> {
-        self.tools.get(name).map(|t| t.as_ref())
+        // Direct lookup by primary name (most common path).
+        if let Some(t) = self.tools.get(name) {
+            return Some(t.as_ref());
+        }
+        // Fallback: scan aliases (Ch03 "rename is add-only"). Slower but
+        // only hits when the primary name wasn't found.
+        for t in self.tools.values() {
+            if t.aliases().iter().any(|a| *a == name) {
+                return Some(t.as_ref());
+            }
+        }
+        None
+    }
+
+    /// Layer 1: validate input before permission checks (Ch04 fail fast).
+    pub fn validate(&self, name: &str, params: &serde_json::Value) -> Result<(), String> {
+        let tool = self
+            .get(name)
+            .ok_or_else(|| format!("Tool '{}' not found", name))?;
+        tool.validate_input(params)
+    }
+
+    /// Layer 2-3: tool-specific permission check (Ch04).
+    pub fn check_perms(&self, name: &str, params: &serde_json::Value) -> crate::tools::tool::PermissionDecision {
+        let tool = match self.get(name) {
+            Some(t) => t,
+            None => return crate::tools::tool::PermissionDecision::Deny(format!("Tool '{}' not found", name)),
+        };
+        tool.check_permissions(params)
     }
 
     /// Tool definitions for the LLM request (name + description + schema).

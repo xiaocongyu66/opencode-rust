@@ -598,8 +598,29 @@ impl SessionRunner {
                                     Err(crate::tools::tool::ToolFailure::Message(reason))
                                 }
                                 _ => {
-                                    // Allow or passthrough: execute the tool.
-                                    tools.execute(name, input.clone(), &ctx).await
+                                    // Hook allowed or passthrough. Now run the
+                                    // three-layer permission pipeline (Ch03/Ch04):
+                                    // validate_input → check_permissions → execute.
+                                    use crate::tools::tool::{PermissionDecision, ToolFailure};
+                                    // Layer 1: input validation (fail fast).
+                                    if let Err(msg) = tools.validate(name, &input) {
+                                        Err(ToolFailure::Message(format!("invalid input: {}", msg)))
+                                    } else {
+                                        // Layer 2-3: tool-specific permission check.
+                                        match tools.check_perms(name, &input) {
+                                            PermissionDecision::Deny(reason) => {
+                                                Err(ToolFailure::Message(reason))
+                                            }
+                                            PermissionDecision::Allow => {
+                                                tools.execute(name, input.clone(), &ctx).await
+                                            }
+                                            PermissionDecision::Ask => {
+                                                // Auto-allow in non-interactive runs for now;
+                                                // the TUI layer handles interactive prompts.
+                                                tools.execute(name, input.clone(), &ctx).await
+                                            }
+                                        }
+                                    }
                                 }
                             };
 
