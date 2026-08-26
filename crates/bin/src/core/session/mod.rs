@@ -25,6 +25,7 @@ pub mod message_v2;
 pub mod processor;
 pub mod llm;
 pub mod reminders;
+pub mod subagent;
 
 use async_trait::async_trait;
 use crate::schema::ids::SessionID;
