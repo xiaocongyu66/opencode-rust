@@ -451,6 +451,11 @@ impl SessionRunner {
         let session_id_clone = session_id.clone();
         let agent_id_clone = agent_id.to_string();
         let tx_clone = tx.cloned();
+
+        // Load hook registry from ~/.rsopencode/hooks.json (claude-code-book Ch08).
+        // PreToolUse hooks can deny a tool call before it runs; PostToolUse hooks
+        // fire after completion. Missing file = no hooks, proceed normally.
+        let hooks = load_hooks();
         let step_clone = step;
         let publisher_for_task = publisher.clone();
         let model_clone = model.clone();
@@ -574,7 +579,42 @@ impl SessionRunner {
                                 name
                             );
 
-                            let result = tools.execute(name, input.clone(), &ctx).await;
+                            // PreToolUse hook (claude-code-book Ch08): resolve
+                            // the chain for this tool+event and run it. A deny
+                            // decision short-circuits the tool call.
+                            let hook_input = crate::core::hooks::HookInput {
+                                event: crate::core::hooks::EVENT_PRE_TOOL_USE.to_string(),
+                                tool: Some(name.clone()),
+                                input: Some(input.clone()),
+                                session_id: Some(session_id_clone.0.clone()),
+                                cwd: std::env::current_dir().ok().map(|p| p.to_string_lossy().to_string()),
+                            };
+                            let hook_chain = hooks.resolve(&hook_input);
+                            let pre_decision = crate::core::hooks::run_chain(&hook_chain, &hook_input).await;
+                            let result = match pre_decision.decision() {
+                                crate::core::hooks::HookDecision::Deny => {
+                                    // Hook denied: synthesize a failure result.
+                                    let reason = pre_decision.reason.clone().unwrap_or_else(|| "denied by PreToolUse hook".to_string());
+                                    Err(crate::tools::tool::ToolFailure::Message(reason))
+                                }
+                                _ => {
+                                    // Allow or passthrough: execute the tool.
+                                    tools.execute(name, input.clone(), &ctx).await
+                                }
+                            };
+
+                            // PostToolUse hook fires after the tool returns.
+                            let post_input = crate::core::hooks::HookInput {
+                                event: crate::core::hooks::EVENT_POST_TOOL_USE.to_string(),
+                                tool: Some(name.clone()),
+                                input: Some(input.clone()),
+                                session_id: Some(session_id_clone.0.clone()),
+                                cwd: std::env::current_dir().ok().map(|p| p.to_string_lossy().to_string()),
+                            };
+                            let post_chain = hooks.resolve(&post_input);
+                            let _ = crate::core::hooks::run_chain(&post_chain, &post_input).await;
+
+                            let result = result;
                             match &result {
                                 Ok(tool_result) => {
                                     let summary = tool_result.content.iter()
@@ -689,4 +729,19 @@ impl SessionRunner {
     pub async fn interrupt(&self, _session_id: &SessionID) {
         tracing::info!("Interrupt requested");
     }
+}
+
+/// Load hook registry from ~/.rsopencode/hooks.json at the user layer.
+/// Returns an empty registry if the file is missing or unreadable.
+fn load_hooks() -> crate::core::hooks::HookRegistry {
+    use crate::core::hooks::{HookRegistry, HookLayer};
+    let mut reg = HookRegistry::new();
+    let path = match dirs::home_dir() {
+        Some(h) => h.join(".rsopencode").join("hooks.json"),
+        None => return reg,
+    };
+    if let Err(e) = reg.load_file(&path, HookLayer::User) {
+        tracing::debug!("hooks load skipped: {}", e);
+    }
+    reg
 }
