@@ -6,9 +6,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Arc;
 
-use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 
 use super::protocol::HookInput;
@@ -141,16 +139,6 @@ fn matcher_hits(pattern: &str, tool: Option<&str>) -> bool {
             .any(|p| p.trim() == t || p.trim() == "*"),
         None => false,
     }
-}
-
-/// Type alias to avoid deeply-nested generics in the global singleton.
-pub type SharedRegistry = Arc<RwLock<HookRegistry>>;
-
-/// Global singleton registry (lazy).
-pub fn global() -> SharedRegistry {
-    static REG: std::sync::OnceLock<SharedRegistry> = std::sync::OnceLock::new();
-    REG.get_or_init(|| Arc::new(RwLock::new(HookRegistry::new())))
-        .clone()
 }
 
 #[cfg(test)]

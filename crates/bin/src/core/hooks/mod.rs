@@ -17,4 +17,4 @@ pub mod registry;
 
 pub use executor::{run_chain, run_hook};
 pub use protocol::{HookDecision, HookInput, HookOutput, ALL_EVENTS};
-pub use registry::{HookConfig, HookEntry, HookLayer, HookRegistry, global};
+pub use registry::{HookConfig, HookEntry, HookLayer, HookRegistry};
