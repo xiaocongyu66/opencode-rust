@@ -284,15 +284,13 @@ impl App {
         // create the stub if needed.
 
         let (tx, rx) = mpsc::channel::<RunnerEvent>(256);
-        self.runner_rx = Some(rx);
-        // ACP bridge (claude-code-book Ch02/Ch13): a separate channel for
-        // future frontends (IDE/print). The TUI still polls runner_rx
-        // directly for now; acp_rx is available but unused until the
-        // poll_runner_events migration lands.
-        let (acp_tx, _acp_rx) = mpsc::channel::<crate::core::acp::AcpEvent>(256);
-        // Bridge drains a separate receiver — but we gave rx to App above.
-        // For now the bridge is wired but idle; full migration is P2 follow-up.
-        let _ = acp_tx;
+        // ACP bridge (claude-code-book Ch02/Ch13): drain RunnerEvent and
+        // forward as AcpEvent. TUI subscribes to acp_rx — fully decoupled
+        // from the RunnerEvent type.
+        let (acp_tx, acp_rx) = mpsc::channel::<crate::core::acp::AcpEvent>(256);
+        self.acp_rx = Some(acp_rx);
+        crate::core::acp::spawn_bridge(rx, acp_tx);
+        self.runner_rx = None; // rx consumed by bridge; TUI reads acp_rx
         let tx_send = tx.clone();
 
         let store = self.store.clone();
@@ -543,20 +541,19 @@ impl App {
     }
 
     pub fn poll_runner_events(&mut self) {
-        let rx = match &mut self.runner_rx {
+        // claude-code-book Ch02/Ch13: TUI subscribes to AcpEvent, not RunnerEvent.
+        // The bridge task drains the runner channel and forwards converted events.
+        let rx = match &mut self.acp_rx {
             Some(rx) => rx,
             None => return,
         };
 
         while let Ok(event) = rx.try_recv() {
+            use crate::core::acp::{AcpEvent, StreamDelta};
             match event {
-                RunnerEvent::StepStarted { .. } => {
+                AcpEvent::StreamRequestStart { step, .. } => {
                     self.current_assistant_text.clear();
                     self.current_reasoning_text.clear();
-                    // Only push a new assistant message header if the last message
-                    // isn't already an assistant message. Multi-step turns (where
-                    // the LLM calls a tool then continues) should append to the
-                    // same assistant message, not create a new "● 助手" header.
                     let needs_new = match self.messages.last() {
                         None => true,
                         Some(last) => last.role != MessageRole::Assistant,
@@ -565,16 +562,14 @@ impl App {
                         self.messages.push(ChatMessage::new(MessageRole::Assistant, String::new()));
                     }
                     self.messages_scroll.follow_if_at_bottom();
-                    self.step_count += 1;
+                    self.step_count = step;
                     self.sidebar.context_tokens = self.total_input_tokens + self.total_output_tokens;
                     self.sidebar.tool_call_count = self.tool_call_count;
                     self.sidebar.step_count = self.step_count;
-                    // Start in thinking mode — will switch to responding on first TextDelta.
                     self.spinner.set_mode(crate::tui::component::spinner::SpinnerMode::Thinking);
                     self.spinner.pick_new_verb();
                 }
-                RunnerEvent::TextDelta { text } => {
-                    // First text delta → switch to responding mode.
+                AcpEvent::StreamEvent(StreamDelta::Text { text }) => {
                     self.spinner.set_mode(crate::tui::component::spinner::SpinnerMode::Responding);
                     self.current_assistant_text.push_str(&text);
                     if let Some(last) = self.messages.last_mut() {
@@ -583,24 +578,18 @@ impl App {
                         }
                     }
                 }
-                RunnerEvent::ReasoningDelta { text } => {
-                    // Accumulate reasoning deltas; flushed as a single
-                    // block-quote on ReasoningDone to avoid per-chunk
-                    // block-quote prefixes and extra blank lines.
+                AcpEvent::StreamEvent(StreamDelta::Reasoning { text }) => {
                     self.current_reasoning_text.push_str(&text);
-                    // Also push incrementally to the assistant message so the
-                    // user sees streaming thinking (not just the final block).
-                    // Without this the view appears stuck during long thinking.
                     if let Some(last) = self.messages.last_mut() {
                         if last.role == MessageRole::Assistant {
                             last.push_text(text);
                         }
                     }
                 }
-                RunnerEvent::ReasoningDone { .. } => {
-                    // Reasoning was already streamed incrementally to the
-                    // assistant message in ReasoningDelta. Just clear the
-                    // accumulator and add a trailing newline for separation.
+                AcpEvent::TextEnd => {
+                    self.current_assistant_text.clear();
+                }
+                AcpEvent::ReasoningEnd => {
                     self.current_reasoning_text.clear();
                     if let Some(last) = self.messages.last_mut() {
                         if last.role == MessageRole::Assistant {
@@ -608,15 +597,10 @@ impl App {
                         }
                     }
                 }
-                RunnerEvent::TextDone { .. } => {
-                    self.current_assistant_text.clear();
-                }
-                RunnerEvent::ToolStarted { tool_name, call_id, input } => {
-                    // Attach to the current assistant message if possible; otherwise create one.
+                AcpEvent::ToolStarted { tool_name, call_id, input } => {
                     let state = ToolPartState::Pending { input };
                     self.tool_call_count += 1;
                     self.sidebar.tool_call_count = self.tool_call_count;
-                    // Update footer status to show which tool is running.
                     self.footer.status = format!("▶ {}", tool_display_name(&tool_name));
                     self.spinner_active = true;
                     self.spinner.set_mode(crate::tui::component::spinner::SpinnerMode::ToolUse);
@@ -632,34 +616,29 @@ impl App {
                     self.messages.push(msg);
                     self.messages_scroll.follow_if_at_bottom();
                 }
-                RunnerEvent::ToolSuccess { tool_name, call_id, summary } => {
+                AcpEvent::ToolSuccess { tool_name, call_id, summary } => {
                     let new_state = ToolPartState::Completed {
                         input: serde_json::Value::Null,
                         output: summary,
                     };
-                    // Try to update an existing pending tool part first.
                     let updated = self
                         .messages
                         .last_mut()
                         .map(|m| m.complete_tool(&call_id, new_state.clone()))
                         .unwrap_or(false);
                     if !updated {
-                        // No matching pending part — emit a standalone assistant message.
                         let mut msg = ChatMessage::new(MessageRole::Assistant, String::new());
                         msg.push_tool(tool_name, call_id, new_state);
                         self.messages.push(msg);
                     } else {
-                        // Refresh the legacy `text` field of the updated message so
-                        // text-only renderers reflect the new state.
                         refresh_message_text(self.messages.last_mut().unwrap());
                     }
                     self.messages_scroll.follow_if_at_bottom();
-                    // Tool done — go back to thinking while LLM continues.
                     self.footer.status = crate::t!("tui.status.thinking").to_string();
                     self.spinner.set_mode(crate::tui::component::spinner::SpinnerMode::Thinking);
                     self.spinner.pick_new_verb();
                 }
-                RunnerEvent::ToolFailed { tool_name, call_id, error } => {
+                AcpEvent::ToolFailed { tool_name, call_id, error } => {
                     let new_state = ToolPartState::Error {
                         input: serde_json::Value::Null,
                         error: error.clone(),
@@ -681,11 +660,10 @@ impl App {
                     self.spinner.set_mode(crate::tui::component::spinner::SpinnerMode::Thinking);
                     self.spinner.pick_new_verb();
                 }
-                RunnerEvent::StepFinished { usage, .. } => {
+                AcpEvent::StepFinished { usage, .. } => {
                     if let Some(u) = usage {
                         self.total_input_tokens += u.input_tokens.unwrap_or(0);
                         self.total_output_tokens += u.output_tokens.unwrap_or(0);
-                        // Estimate cost: rough $3/M input + $15/M output (Claude Sonnet-ish).
                         let in_cost = (u.input_tokens.unwrap_or(0) as f64) * 3.0 / 1_000_000.0;
                         let out_cost = (u.output_tokens.unwrap_or(0) as f64) * 15.0 / 1_000_000.0;
                         self.sidebar.context_cost += in_cost + out_cost;
@@ -694,8 +672,7 @@ impl App {
                     self.sidebar.tool_call_count = self.tool_call_count;
                     self.sidebar.step_count = self.step_count;
                 }
-                RunnerEvent::CompactionNeeded { tier, used, effective } => {
-                    // Surface compaction pressure to the user (claude-code-book Ch07).
+                AcpEvent::CompactionNeeded { tier, used, effective } => {
                     use crate::core::session::compaction::CompactionTier;
                     let pct = if effective > 0 {
                         (used as f64 / effective as f64 * 100.0) as u64
@@ -719,7 +696,7 @@ impl App {
                         self.toast_manager.show(msg, variant);
                     }
                 }
-                RunnerEvent::Error { message } => {
+                AcpEvent::Error { message } => {
                     self.messages.push(ChatMessage::new(
                         MessageRole::System,
                         crate::t!("tui.message.error", message = message).to_string(),
@@ -728,14 +705,14 @@ impl App {
                     self.is_thinking = false;
                     self.spinner_active = false;
                     self.footer.status = crate::t!("tui.status.error").to_string();
-                    self.runner_rx = None;
+                    self.acp_rx = None;
                     return;
                 }
-                RunnerEvent::Done { .. } => {
+                AcpEvent::Done { .. } => {
                     self.is_thinking = false;
                     self.spinner_active = false;
                     self.footer.status = crate::t!("tui.status.idle").to_string();
-                    self.runner_rx = None;
+                    self.acp_rx = None;
                     // Promote the next queued message: find the first queued
                     // user message, un-queue it, and re-submit it so it
                     // actually gets sent to the LLM.

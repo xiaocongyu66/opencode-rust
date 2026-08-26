@@ -269,10 +269,11 @@ pub(super) fn handle_insert_key(app: &mut App, key: event::KeyEvent) {
             app.prompt.focused = true;
         }
         PromptAction::Cancel => {
-            // If the LLM is generating, Esc interrupts it (drops the runner
-            // channel so the background task's sends fail and it exits).
+            // If the LLM is generating, Esc interrupts it (drops the ACP
+            // channel so the bridge task's sends fail and it exits).
             if app.is_thinking {
                 app.runner_rx = None;
+                app.acp_rx = None;
                 app.is_thinking = false;
                 app.spinner_active = false;
                 app.footer.status = crate::t!("tui.status.idle").to_string();

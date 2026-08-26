@@ -24,6 +24,11 @@ pub enum AcpEvent {
     /// RunnerEvent::TextDelta / ReasoningDelta. Frontends render incrementally.
     StreamEvent(StreamDelta),
 
+    /// LLM text output for this turn is complete (frontends flush accumulators).
+    TextEnd,
+    /// LLM reasoning output for this turn is complete.
+    ReasoningEnd,
+
     /// A structured message boundary — new user/assistant/system message
     /// added to the transcript. Frontends add a new bubble.
     Message {
@@ -110,11 +115,11 @@ pub fn from_runner_event(event: RunnerEvent, step: usize) -> Option<AcpEvent> {
         RunnerEvent::TextDelta { text } => {
             Some(AcpEvent::StreamEvent(StreamDelta::Text { text }))
         }
-        RunnerEvent::TextDone { .. } => None,
+        RunnerEvent::TextDone { .. } => Some(AcpEvent::TextEnd),
         RunnerEvent::ReasoningDelta { text } => {
             Some(AcpEvent::StreamEvent(StreamDelta::Reasoning { text }))
         }
-        RunnerEvent::ReasoningDone { .. } => None,
+        RunnerEvent::ReasoningDone { .. } => Some(AcpEvent::ReasoningEnd),
         RunnerEvent::ToolStarted { tool_name, call_id, input } => {
             Some(AcpEvent::ToolStarted { tool_name, call_id, input })
         }
