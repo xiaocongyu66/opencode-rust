@@ -708,6 +708,33 @@ impl App {
                     self.acp_rx = None;
                     return;
                 }
+                AcpEvent::Message { role, text, queued } => {
+                    // New structured message boundary (Ch02).
+                    let mut msg = ChatMessage::new(role, text);
+                    msg.queued = queued;
+                    self.messages.push(msg);
+                    self.messages_scroll.follow_if_at_bottom();
+                }
+                AcpEvent::TombstoneMessage { message_index } => {
+                    // Mark a message as retracted (Ch02 streaming fallback).
+                    if let Some(idx) = message_index {
+                        if idx < self.messages.len() {
+                            // Replace retracted message with a muted marker.
+                            self.messages[idx] = ChatMessage::new(
+                                MessageRole::System,
+                                "[message retracted]".to_string(),
+                            );
+                        }
+                    }
+                }
+                AcpEvent::ToolUseSummaryMessage { tool_call_ids: _, summary } => {
+                    // Folded tool-call summary (Ch02). Append as a system note.
+                    if !summary.is_empty() {
+                        let mut msg = ChatMessage::new(MessageRole::System, summary);
+                        self.messages.push(msg);
+                        self.messages_scroll.follow_if_at_bottom();
+                    }
+                }
                 AcpEvent::Done { .. } => {
                     self.is_thinking = false;
                     self.spinner_active = false;
